@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: review-worker-pool-bugs
+expected_outcome: |
+  The review identifies the planted defects (wg.Add inside the goroutine, missing cancel for the timeout context, unclosed response body, shadowed err, no HTTP client timeout / unbounded goroutines) ordered by severity with concrete fixes.
+context:
+  scaffold_script: place-files.sh

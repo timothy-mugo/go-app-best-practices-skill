@@ -1,0 +1,47 @@
+# golangci-lint v1 config. For golangci-lint v2, run `golangci-lint migrate` to convert it.
+run:
+  timeout: 5m
+  tests: true
+  modules-download-mode: readonly
+
+linters:
+  enable:
+    - errcheck      # Check for unchecked errors
+    - gosimple      # Simplify code
+    - govet         # Standard Go analyzer
+    - ineffassign   # Detect ineffectual assignments
+    - staticcheck   # Advanced static analysis
+    - unused        # Find unused code
+    - gofmt         # Check formatting
+    - goimports     # Check imports
+    - misspell      # Fix spelling mistakes
+    - revive        # Fast, configurable linter
+    - gosec         # Security issues
+    - bodyclose     # Check HTTP body closed
+    - noctx         # Find HTTP requests without context
+    - errname       # Check error naming
+    - errorlint     # Find error wrapping issues
+
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+
+  govet:
+    check-shadowing: true
+
+  revive:
+    rules:
+      - name: exported
+        severity: warning
+      - name: unexported-return
+        severity: warning
+      - name: var-naming
+        severity: warning
+
+issues:
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - errcheck
+        - gosec

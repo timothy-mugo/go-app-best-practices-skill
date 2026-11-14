@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: rest-service-skeleton
+expected_outcome: |
+  A compiling Go module with cmd/ main wiring, internal packages, an http.Server with timeouts, graceful shutdown on SIGTERM, separate health and readiness endpoints, validated JSON handlers, and structured logging.

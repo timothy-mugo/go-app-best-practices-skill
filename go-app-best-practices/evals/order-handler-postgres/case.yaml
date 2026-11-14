@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: order-handler-postgres
+expected_outcome: |
+  Handler, service, and repository code where the stock check, decrement, and inserts occur in one transaction with deferred rollback, queries are parameterised and use the request context, input is validated, concurrent oversell is prevented (e.g. SELECT FOR UPDATE or conditional UPDATE), and errors are wrapped and mapped to proper HTTP statuses.
