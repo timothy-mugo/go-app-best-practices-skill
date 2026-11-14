@@ -38,10 +38,19 @@ A router plus a short set of non-negotiable rules. The depth lives in `reference
 | Login flows, sessions, forms, WebSockets, server-side state | `references/web-application-patterns.md` |
 | Payments, order lifecycles, state machines, background jobs, retries, idempotency | `references/real-world-project-patterns.md` |
 | Table-driven tests, mocks/fakes, integration tests, fuzzing, benchmarks | `references/testing-patterns.md` |
-| `io.Reader`/`Writer` composition, `net/http` server/client details, middleware, `database/sql` basics | `references/standard-library/io-and-http.md` |
-| `encoding/json`, `strings`/`strconv`, `regexp`, `filepath` vs `path`, `fmt` verbs and `Stringer` | `references/standard-library/encoding-and-strings.md` |
-| `time.Duration`, timers/tickers, `log/slog`, `crypto/rand` and constant-time compare | `references/standard-library/time-and-context.md` |
+| `io.Reader`/`Writer` composition, `net/http` server/client details, middleware, `database/sql` basics | `references/guidelines/standard-library/io-and-http.md` |
+| `encoding/json`, `strings`/`strconv`, `regexp`, `filepath` vs `path`, `fmt` verbs and `Stringer` | `references/guidelines/standard-library/encoding-and-strings.md` |
+| `time.Duration`, timers/tickers, `log/slog`, `crypto/rand` and constant-time compare | `references/guidelines/standard-library/time-and-context.md` |
+| Error wrapping (`%w`, `errors.Is/As/Join`), sentinel and custom error types, panic/recover, handle-or-return | `references/guidelines/error-handling/` (4 files) |
+| Goroutine lifecycle, channels/pipelines, `sync` primitives, context rules, `errgroup`/`semaphore`/`singleflight` | `references/guidelines/concurrency/` (5 files) |
+| Naming, package names, receivers, initialisms, `gofmt`/imports/doc comments, constructors and functional options | `references/guidelines/naming-and-style/` (3 files) |
+| Interface design, dependency injection, struct/interface embedding | `references/guidelines/abstractions/` (3 files) |
+| Table-driven tests, mocks vs real deps, benchmarks/fuzzing, `httptest`/testcontainers/golden files | `references/guidelines/testing/` (4 files) |
+| Package design, `internal/`, `go.mod`/workspaces/versioning, `go generate`, build tags, `go:embed` | `references/guidelines/project-organization/` (3 files) |
+| Zero values, nil vs empty slices, aliasing, map init, allocations, escape analysis, `sync.Pool` | `references/guidelines/data-types-and-memory/` (2 files) |
 | Logging, metrics, tracing, health/readiness endpoints | `references/observability-patterns.md` |
+
+`references/guidelines/` is a second, finer-grained set (each file ~100-190 lines, one topic, with an `index.md` per category and a root `index.md`). Prefer it when the task is narrow (say, only error wrapping), and the larger top-level guides when you need worked examples across a whole feature. Where the two overlap they agree; where they differ, follow the guidelines file and the repo's existing conventions.
 
 The `standard-library/` files are short (about 170 lines each) and cover the stdlib idioms every
 service touches; read the one matching the packages you're about to use.
@@ -107,6 +116,15 @@ of style. Following the reasoning matters more than following the letter.
 - Set security headers, restrictive CORS, and rate limits on auth and expensive endpoints. Don't log credentials, tokens, or PII.
 - Run `govulncheck ./...` and keep dependencies updated. When touching auth, uploads, outbound fetches (SSRF), or anything money-related, read `api-security-patterns.md` and `web-security-attacks-guide.md` first.
 
+### Style and API shape
+- Package names are short, lowercase, singular nouns; no `util`, `common`, `helpers`. Initialisms keep their case (`ID`, `URL`, `HTTPClient`). Receiver names are 1-2 letters and consistent across a type's methods. Don't prefix getters with `Get`.
+- Use `gofmt`/`goimports`, group imports stdlib / third-party / local, and write doc comments that start with the identifier name. Prefer guard clauses and early returns over nested `else`.
+- Constructors: `NewX(deps...)` for required dependencies, functional options (`WithTimeout(...)`) for optional settings on public APIs, a config struct when there are many fields. Pointer receivers when the method mutates or the type is large or holds a mutex; don't mix receiver kinds on one type.
+- Embed only when you want the embedded type's whole method set promoted; otherwise hold a field and forward. Embedding is not inheritance and leaks the embedded API into yours. Assert interface satisfaction at compile time with `var _ Iface = (*T)(nil)` for exported types.
+- Error types: sentinels for conditions callers branch on, custom types when they need data, `errors.Join` for aggregating independent failures. Beware the nil-interface trap (returning a typed nil pointer as `error`).
+- Concurrency building blocks beyond the basics: `errgroup` with `SetLimit` for bounded parallelism, `singleflight` to collapse duplicate cache-miss work, `sync.Once` for lazy init, `atomic` for simple counters. Prefer a mutex for protecting state and channels for handing off ownership or work.
+- Modules and builds: keep `go.mod` tidy, commit `go.sum`, use `go.work` only for local multi-module development, put generated code behind `//go:generate` and mark it `// Code generated ... DO NOT EDIT.`, and use build tags (or `-short`) to separate slow integration tests.
+
 ### Standard library idioms
 - `encoding/json`: use `json.NewDecoder(r)` / `NewEncoder(w)` on streams instead of `ReadAll` + `Unmarshal`; a nil slice marshals to `null` and an empty one to `[]`, so initialise slices in API responses that clients iterate; tag internal fields `json:"-"`.
 - Prefer `strconv` over `fmt.Sprintf` for primitive conversions (faster, fewer allocations) and `strings.Builder` with `Grow` for concatenation in loops.
@@ -147,4 +165,4 @@ when real defects exist; a short list of real problems is more useful.
 
 ## Attribution
 
-The references and rules in this skill are adapted from [nutcas3/best-practices](https://github.com/nutcas3/best-practices). The `references/standard-library/` files come from the sw-factory agentic-orchestrator Go guidelines.
+The references and rules in this skill are adapted from [nutcas3/best-practices](https://github.com/nutcas3/best-practices). The `references/guidelines/` files come from the sw-factory agentic-orchestrator Go guidelines.

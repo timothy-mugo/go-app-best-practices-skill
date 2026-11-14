@@ -29,11 +29,6 @@ elapsed := time.Since(start) // uses monotonic clock — reliable
 
 `time.After` creates a timer that isn't garbage collected until it fires:
 
-> **Go version note:** this applies to modules with `go` < 1.23. From Go 1.23, unreferenced
-> timers are collected even if they never fire, so the leak is gone and `timer.Reset` no longer
-> needs the drain dance below. Check `go.mod` before "fixing" working code; the reuse pattern is
-> still worthwhile in very hot loops.
-
 ```go
 // BUG: leaks a timer every iteration
 for {
