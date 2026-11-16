@@ -46,4 +46,4 @@ go-app-best-practices/
 
 ## Attribution
 
-Adapted from [nutcas3/best-practices](https://github.com/nutcas3/best-practices). The files under `references/guidelines/` come from the sw-factory agentic-orchestrator Go guidelines.
+Adapted from [nutcas3/best-practices](https://github.com/nutcas3/best-practices). The files under `references/guidelines/` come from the sw-factory agentic-orchestrator Go guidelines. `references/uber-style-guide.md` is a condensed paraphrase of the [Uber Go Style Guide](https://github.com/uber-go/guide) (Apache 2.0, Uber Technologies).

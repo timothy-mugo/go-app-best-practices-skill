@@ -49,6 +49,7 @@ A router plus a short set of non-negotiable rules. The depth lives in `reference
 | Package design, `internal/`, `go.mod`/workspaces/versioning, `go generate`, build tags, `go:embed` | `references/guidelines/project-organization/` (3 files) |
 | Zero values, nil vs empty slices, aliasing, map init, allocations, escape analysis, `sync.Pool` | `references/guidelines/data-types-and-memory/` (2 files) |
 | Logging, metrics, tracing, health/readiness endpoints | `references/observability-patterns.md` |
+| Reviewing or writing code to a strict team style (Uber conventions): API-boundary copies, enums, `init()`, `run()`/exit, declaration and import style, test-table limits | `references/uber-style-guide.md` (condensed, ~150 lines) |
 
 `references/guidelines/` is a second, finer-grained set (each file ~100-190 lines, one topic, with an `index.md` per category and a root `index.md`). Prefer it when the task is narrow (say, only error wrapping), and the larger top-level guides when you need worked examples across a whole feature. Where the two overlap they agree; where they differ, follow the guidelines file and the repo's existing conventions.
 
@@ -70,6 +71,8 @@ of style. Following the reasoning matters more than following the letter.
 - **Handle each error once**: either return it or log it, not both. Log at the boundary (handler, worker loop, `main`), otherwise one failure produces a dozen duplicate log lines.
 - Use sentinel errors (`var ErrNotFound = errors.New(...)`) or typed errors for conditions callers must branch on, and map them to HTTP/gRPC status codes in one place.
 - `panic` is for programmer bugs at startup, not for runtime conditions. Recover at goroutine and request boundaries so one bad request can't kill the process.
+- Keep wrap context short and drop "failed to" (it stacks up as errors bubble): `fmt.Errorf("new store: %w", err)`. Use `%v` instead of `%w` when you deliberately don't want callers depending on the cause. Name error vars `ErrFoo`/`errFoo` and error types `FooError`.
+- Use the comma-ok form for type assertions (`v, ok := x.(T)`); the single-value form panics.
 - Don't shadow `err` with `:=` inside an `if`/`for` block when you meant to assign the outer one; the inner error is silently lost.
 
 ### Context
@@ -80,7 +83,9 @@ of style. Following the reasoning matters more than following the letter.
 ### Goroutines and concurrency
 - Before writing `go`, know **who stops it and how**. Every goroutine needs a lifecycle: context cancellation, a closed channel, or a `WaitGroup`/`errgroup` that the owner waits on. Leaked goroutines are the most common Go memory leak.
 - Call `wg.Add(n)` **before** `go`, never inside the goroutine; otherwise `Wait()` can return early. Prefer `golang.org/x/sync/errgroup` when tasks can fail, since it gives you first-error cancellation for free.
+- Channels are unbuffered or size 1 by default; any bigger buffer needs a stated reason (what bounds it, what happens when it fills under load). Never start goroutines in `init()` or as an import side effect: expose a type with `Close`/`Stop` that signals the goroutine and waits for it. Test goroutine-spawning packages with `go.uber.org/goleak`.
 - Only the sender closes a channel; never close from the receiver or close twice.
+- Keep the mutex as a named unexported field (`mu sync.Mutex`), never embedded (it would export `Lock`/`Unlock`), and never `new(sync.Mutex)`; use typed atomics (`atomic.Int64`, `atomic.Bool`) instead of raw `int64` plus `atomic.AddInt64`.
 - Guard shared state with a mutex or confine it to one goroutine. Don't copy a `sync.Mutex`/`WaitGroup` (pass pointers). Release locks with `defer mu.Unlock()`.
 - Loop variables are per-iteration since Go 1.22 (check `go.mod`'s `go` line); older code needs the `v := v` copy before capturing in a closure.
 - In modules targeting Go < 1.23, avoid `time.After` in a loop (each call leaks a timer until it fires); use one `time.NewTimer` with `Reset`/`Stop`. From 1.23 the leak is fixed, so don't rewrite working code. Always `defer ticker.Stop()` for tickers. Use `time.Duration` constants (`30 * time.Second`), never bare ints.
@@ -105,6 +110,10 @@ of style. Following the reasoning matters more than following the letter.
 - Layout: `cmd/<app>/main.go` (wiring only), `internal/` for everything private (`internal/<domain>/...` by feature or domain, not by `models/` `utils/` `helpers/` layers), `pkg/` only for code truly meant to be imported by others.
 - **Accept interfaces, return structs.** Define interfaces where they are *consumed*, keep them small (1-3 methods), and don't create an interface until there is a second implementation or a test seam that needs one.
 - Dependency injection through constructors (`NewService(repo, logger)`); no package-level mutable state, no `init()` side effects. It keeps tests hermetic and wiring visible in `main`.
+- **Copy slices and maps at API boundaries** (`slices.Clone`, `maps.Clone`) when you store one you were given or return one that is internal state; otherwise callers can mutate your struct from outside.
+- `os.Exit`/`log.Fatal` only in `main()`, and preferably once: `func main() { if err := run(); err != nil { log.Fatal(err) } }`. Anywhere else they skip `defer`s and kill the test binary.
+- Avoid `init()` and mutable globals; if unavoidable, `init` must be deterministic with no I/O, env, or flag access. Start enums at `iota + 1` so zero means "unset". Tag every marshalled struct field (`json:"user_id"`); the wire format is a contract. Don't reuse built-in names (`len`, `copy`, `new`, `error`, `max`) as identifiers.
+- Use `time.Time`/`time.Duration` in APIs and config, `t.AddDate(0,0,1)` for "next calendar day" and `t.Add(24*time.Hour)` for "24 hours later". Avoid naked bool/int parameters at call sites (`f(true, false)`); use named option types or a struct.
 - Configuration comes from environment/flags, is parsed and **validated once at startup**, and fails fast. Secrets never live in code, images, or logs.
 - Pre-allocate slices/maps when the size is known (`make([]T, 0, n)`). Writing to a nil map panics. `defer` inside a loop runs at function end, so close per-iteration resources in a helper function.
 - Prefer the standard library (`net/http` with Go 1.22 pattern routing, `log/slog`, `errors`, `encoding/json`) and add a dependency only for a clear gain.
@@ -141,6 +150,7 @@ of style. Following the reasoning matters more than following the letter.
 ### Testing
 - Table-driven tests with `t.Run` subtests, `t.Helper()` in helpers, `t.Cleanup` for teardown, and `t.Parallel()` where safe.
 - Always run `go test -race ./...` - data races only show up there.
+- Keep table tests shallow: when cases need several `shouldCallX` flags, `setupMocks` funcs, or conditional assertions in the loop body, split into separate tests or smaller tables.
 - Test through small interfaces with hand-written fakes; use `httptest` for handlers; use real dependencies (testcontainers or a test DB) for repository tests since mocks can't catch SQL mistakes.
 - Cover the error paths and boundaries (empty, nil, negative, huge, cancelled context), not just the happy path. Use fuzzing for parsers and validators.
 
@@ -165,4 +175,4 @@ when real defects exist; a short list of real problems is more useful.
 
 ## Attribution
 
-The references and rules in this skill are adapted from [nutcas3/best-practices](https://github.com/nutcas3/best-practices). The `references/guidelines/` files come from the sw-factory agentic-orchestrator Go guidelines.
+The references and rules in this skill are adapted from [nutcas3/best-practices](https://github.com/nutcas3/best-practices). The `references/guidelines/` files come from the sw-factory agentic-orchestrator Go guidelines. `references/uber-style-guide.md` is a condensed paraphrase of the [Uber Go Style Guide](https://github.com/uber-go/guide) (Apache 2.0, Uber Technologies).
